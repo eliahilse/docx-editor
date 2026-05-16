@@ -1187,14 +1187,17 @@ function convertRunContent(content: RunContent, marks: ReturnType<typeof schema.
 
     case 'break':
       if (content.breakType === 'textWrapping' || !content.breakType) {
-        return [schema.node('hardBreak')];
+        // Carry marks (including any enclosing hyperlink) so the break is
+        // recognized as inside the hyperlink on the way back out.
+        return [schema.node('hardBreak', null, undefined, marks)];
       }
       // Page breaks not supported in inline content
       return [];
 
     case 'tab':
-      // Convert to tab node for proper rendering
-      return [schema.node('tab')];
+      // Carry marks (including any enclosing hyperlink) so round-trip keeps
+      // the tab inside the hyperlink — TOC entries depend on this.
+      return [schema.node('tab', null, undefined, marks)];
 
     case 'drawing':
       if (content.image) {
@@ -1470,10 +1473,13 @@ function convertHyperlink(
       // Add link mark to run marks
       const allMarks = [...runMarks, linkMark];
 
+      // Delegate to the shared run-content converter so tabs, line breaks,
+      // drawings, fields, footnote refs, etc. inside a hyperlink survive the
+      // conversion. Previously only `text` was emitted, which silently
+      // dropped tab runs inside TOC entries — collapsing
+      // "1[tab]Introduction[tab]5" to "1Introduction5".
       for (const content of child.content) {
-        if (content.type === 'text' && content.text) {
-          nodes.push(schema.text(content.text, allMarks));
-        }
+        nodes.push(...convertRunContent(content, allMarks));
       }
     }
   }

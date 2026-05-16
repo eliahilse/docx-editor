@@ -269,3 +269,59 @@ describe('toProseDoc ↔ fromProseDoc round-trip — theme shading preservation'
     expect(shading?.fill?.themeColor).toBeUndefined();
   });
 });
+
+describe('toProseDoc — hyperlink preserves non-text inline content', () => {
+  // TOC entries author tabs between section number, title, and page number,
+  // all wrapped in a single <w:hyperlink>. Previously the hyperlink converter
+  // only emitted text content and dropped tabs/breaks, collapsing
+  // "1[tab]Introduction[tab]5" to "1Introduction5".
+  function makeTocLikeDocument(): Document {
+    return {
+      package: {
+        document: {
+          content: [
+            {
+              type: 'paragraph',
+              content: [
+                {
+                  type: 'hyperlink',
+                  anchor: '_Toc1',
+                  children: [
+                    { type: 'run', content: [{ type: 'text', text: '1' }] },
+                    { type: 'run', content: [{ type: 'tab' }] },
+                    { type: 'run', content: [{ type: 'text', text: 'Introduction' }] },
+                    { type: 'run', content: [{ type: 'tab' }] },
+                    { type: 'run', content: [{ type: 'text', text: '5' }] },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      },
+    };
+  }
+
+  test('tabs inside a hyperlink survive Document → PM conversion', () => {
+    const pmDoc = toProseDoc(makeTocLikeDocument());
+    const inline: string[] = [];
+    pmDoc.descendants((node) => {
+      if (node.isText) inline.push(`text:${node.text}`);
+      else if (node.type.name === 'tab') inline.push('tab');
+    });
+    expect(inline).toEqual(['text:1', 'tab', 'text:Introduction', 'tab', 'text:5']);
+  });
+
+  test('tabs inside a hyperlink survive Document → PM → Document round-trip', () => {
+    const inDoc = makeTocLikeDocument();
+    const outDoc = fromProseDoc(toProseDoc(inDoc), inDoc);
+    const para = outDoc.package.document.content[0];
+    if (para.type !== 'paragraph') throw new Error('expected paragraph');
+    const link = para.content[0];
+    if (link.type !== 'hyperlink') throw new Error('expected hyperlink');
+    const contentTypes = link.children.flatMap((r) =>
+      r.type === 'run' ? r.content.map((c) => c.type) : []
+    );
+    expect(contentTypes).toEqual(['text', 'tab', 'text', 'tab', 'text']);
+  });
+});
