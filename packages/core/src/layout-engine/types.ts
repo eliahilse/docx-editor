@@ -78,7 +78,7 @@ export type RunFormatting = {
    */
   textEffect?: 'blinkBackground' | 'lights' | 'antsBlack' | 'antsRed' | 'shimmer' | 'sparkle';
   /** Hyperlink info if this run is a link */
-  hyperlink?: { href: string; tooltip?: string };
+  hyperlink?: HyperlinkInfo;
   /** Footnote reference ID (if this run contains a footnote reference) */
   footnoteRefId?: number;
   /** Endnote reference ID (if this run contains an endnote reference) */
@@ -103,6 +103,13 @@ export type RunFormatting = {
 export type HyperlinkInfo = {
   href: string;
   tooltip?: string;
+  /**
+   * Skip the painter's "Word default" blue + underline fallback when the run
+   * has no resolved color/underline. Set by the layout-bridge for hyperlinks
+   * inside TOC paragraphs, where Word renders entries in the TOCx paragraph
+   * color rather than the Hyperlink character style's color.
+   */
+  noDefaultStyle?: boolean;
 };
 
 /**

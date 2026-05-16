@@ -2,7 +2,4 @@
 '@eigenpal/docx-js-editor': patch
 ---
 
-Preserve tabs, breaks, and drawings inside `<w:hyperlink>`. The hyperlink
-converter previously emitted only text content, collapsing TOC entries like
-`1[tab]Introduction[tab]5` to `1Introduction5` and dropping the dot leader.
-The PM → Document round-trip kept the link intact as well.
+Render TOC entries with Word fidelity: preserve tabs inside `<w:hyperlink>` (dot leaders no longer collapse) and inherit the TOCx paragraph color instead of the Hyperlink character style's blue + underline.

@@ -57,6 +57,13 @@ const STYLES = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
       </w:tabs>
     </w:pPr>
   </w:style>
+  <w:style w:type="character" w:styleId="Hyperlink">
+    <w:name w:val="Hyperlink"/>
+    <w:rPr>
+      <w:color w:val="0000FF"/>
+      <w:u w:val="single"/>
+    </w:rPr>
+  </w:style>
 </w:styles>`;
 
 const DOCUMENT = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
@@ -65,9 +72,15 @@ const DOCUMENT = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
     <w:p>
       <w:pPr><w:pStyle w:val="TOC1"/></w:pPr>
       <w:hyperlink w:anchor="_Toc1">
-        <w:r><w:t>1</w:t></w:r>
+        <w:r>
+          <w:rPr><w:rStyle w:val="Hyperlink"/></w:rPr>
+          <w:t>1</w:t>
+        </w:r>
         <w:r><w:tab/></w:r>
-        <w:r><w:t>Introduction</w:t></w:r>
+        <w:r>
+          <w:rPr><w:rStyle w:val="Hyperlink"/></w:rPr>
+          <w:t>Introduction</w:t>
+        </w:r>
         <w:r><w:tab/></w:r>
         <w:r><w:t>5</w:t></w:r>
       </w:hyperlink>

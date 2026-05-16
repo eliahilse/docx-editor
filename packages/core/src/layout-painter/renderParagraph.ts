@@ -346,12 +346,31 @@ function renderTextRun(run: TextRun, doc: Document, resolvedCommentIds?: Set<num
       anchor.title = run.hyperlink.tooltip;
     }
     anchor.textContent = run.text;
-    // Style hyperlink — default Word hyperlink color is blue (#0563c1)
-    const hyperlinkColor = run.color || '#0563c1';
-    anchor.style.color = hyperlinkColor;
-    anchor.style.textDecoration = 'underline';
-    // Override span color to match anchor (prevents color mismatch in selection)
-    span.style.color = hyperlinkColor;
+
+    // Inherit from the wrapping span so the run's resolved color and
+    // text-decoration (already applied by applyRunStyles, including any
+    // Hyperlink character-style overrides) are the single source of truth.
+    // Previously we hardcoded text-decoration: underline AND a blue color
+    // on the anchor, which compounded with whatever was on the span and
+    // drew the underline twice for TOC entries.
+    anchor.style.color = 'inherit';
+    anchor.style.textDecoration = 'inherit';
+
+    // Fall back to Word's default hyperlink styling only when the run has
+    // no resolved color/underline from a character style (e.g. a bare
+    // <w:hyperlink> without <w:rStyle w:val="Hyperlink"/>). Hyperlinks
+    // inside TOC paragraphs opt out via `noDefaultStyle` (set by the
+    // layout-bridge) — Word renders them in the TOCx paragraph color.
+    if (!run.hyperlink.noDefaultStyle) {
+      if (!run.color) {
+        anchor.style.color = '#0563c1';
+        span.style.color = '#0563c1';
+      }
+      if (!run.underline) {
+        anchor.style.textDecoration = 'underline';
+      }
+    }
+
     span.appendChild(anchor);
   } else {
     // Set text content

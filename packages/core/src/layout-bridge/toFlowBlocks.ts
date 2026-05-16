@@ -470,6 +470,12 @@ function paragraphToRuns(node: PMNode, startPos: number, _options: ToFlowBlocksO
   const theme = _options.theme;
   const paraDefaults = paragraphRunDefaults(node.attrs as PMParagraphAttrs);
 
+  // Word renders TOC field entries in the TOCx paragraph color rather than
+  // the Hyperlink character style's blue+underline. Flag hyperlinks in such
+  // paragraphs so the painter skips its default link-styling fallback.
+  const styleId = (node.attrs as PMParagraphAttrs).styleId;
+  const inTocParagraph = typeof styleId === 'string' && /^TOC\d*$/i.test(styleId);
+
   node.forEach((child, childOffset) => {
     const childPos = offset + childOffset;
 
@@ -478,6 +484,15 @@ function paragraphToRuns(node: PMNode, startPos: number, _options: ToFlowBlocksO
       // defaults; the spread order below ensures `formatting`'s explicit
       // values win over the inherited fallback.
       const formatting = extractRunFormatting(child.marks, theme);
+      if (inTocParagraph && formatting.hyperlink) {
+        // Word renders TOC field entries in the TOCx paragraph color, not
+        // the Hyperlink character style's blue + underline. Strip those
+        // resolved properties for visual rendering only — the PM doc keeps
+        // the original marks so copy-paste out of a TOC behaves like Word.
+        formatting.hyperlink = { ...formatting.hyperlink, noDefaultStyle: true };
+        delete formatting.color;
+        delete formatting.underline;
+      }
       const run: TextRun = {
         kind: 'text',
         text: child.text,

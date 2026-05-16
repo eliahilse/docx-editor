@@ -39,4 +39,26 @@ test('hyperlink-wrapped TOC entry preserves tab runs between number, title, and 
   // tabs as inline-block elements with class layout-run-tab.
   const tabCount = await page1.locator('.layout-run-tab').count();
   expect(tabCount).toBeGreaterThanOrEqual(2);
+
+  // TOC compat: Word renders TOC entries in the TOCx paragraph color (black),
+  // suppressing the Hyperlink character style's blue + underline. Eigenpal
+  // should match — the anchor on the visible page must not have blue text
+  // nor any text-decoration underline.
+  const anchorColor = await page1
+    .locator('a')
+    .first()
+    .evaluate((a) => {
+      return getComputedStyle(a as HTMLElement).color;
+    });
+  // Not pure blue (rgb(0, 0, 255)) and not Word-default link blue (#0563c1).
+  expect(anchorColor).not.toBe('rgb(0, 0, 255)');
+  expect(anchorColor).not.toBe('rgb(5, 99, 193)');
+
+  const anchorDecoration = await page1
+    .locator('a')
+    .first()
+    .evaluate((a) => {
+      return getComputedStyle(a as HTMLElement).textDecorationLine;
+    });
+  expect(anchorDecoration).toBe('none');
 });

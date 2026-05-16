@@ -271,12 +271,12 @@ describe('toProseDoc ↔ fromProseDoc round-trip — theme shading preservation'
 });
 
 describe('toProseDoc — hyperlink preserves non-text inline content', () => {
-  // TOC entries author tabs between section number, title, and page number,
-  // all wrapped in a single <w:hyperlink>. Previously the hyperlink converter
-  // only emitted text content and dropped tabs/breaks, collapsing
-  // "1[tab]Introduction[tab]5" to "1Introduction5".
-  function makeTocLikeDocument(): Document {
-    return {
+  // TOC entries wrap "[number][tab][title][tab][page]" in one <w:hyperlink>.
+  // Both directions of the converter must keep the tabs — previously the
+  // hyperlink branch only emitted text, collapsing the entry to
+  // "1Introduction5" and dropping the dot leader.
+  test('tabs inside a hyperlink survive Document → PM → Document round-trip', () => {
+    const inDoc: Document = {
       package: {
         document: {
           content: [
@@ -300,20 +300,6 @@ describe('toProseDoc — hyperlink preserves non-text inline content', () => {
         },
       },
     };
-  }
-
-  test('tabs inside a hyperlink survive Document → PM conversion', () => {
-    const pmDoc = toProseDoc(makeTocLikeDocument());
-    const inline: string[] = [];
-    pmDoc.descendants((node) => {
-      if (node.isText) inline.push(`text:${node.text}`);
-      else if (node.type.name === 'tab') inline.push('tab');
-    });
-    expect(inline).toEqual(['text:1', 'tab', 'text:Introduction', 'tab', 'text:5']);
-  });
-
-  test('tabs inside a hyperlink survive Document → PM → Document round-trip', () => {
-    const inDoc = makeTocLikeDocument();
     const outDoc = fromProseDoc(toProseDoc(inDoc), inDoc);
     const para = outDoc.package.document.content[0];
     if (para.type !== 'paragraph') throw new Error('expected paragraph');
