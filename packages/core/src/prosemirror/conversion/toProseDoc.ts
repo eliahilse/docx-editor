@@ -1461,9 +1461,16 @@ function convertHyperlink(
 
   for (const child of hyperlink.children) {
     if (child.type === 'run') {
-      // Merge style formatting with run's inline formatting
+      // Merge style formatting with run's inline formatting. Mirror convertRun
+      // and pull *only* the character style's own properties — resolveRunStyle
+      // walks all the way up to docDefaults, and merging that on top of the
+      // already-resolved paragraph style re-introduces docDefaults' rPr (e.g.
+      // sz=24 in the parity doc) and clobbers the paragraph style's run size.
+      // TOC3 entries are wrapped in <w:hyperlink> so this path is the one
+      // that decides their font size; using resolveRunStyle here made TOC3
+      // render at the doc default 12pt instead of the TOC3 style's 10pt.
       const runStyleFormatting = child.formatting?.styleId
-        ? styleResolver?.resolveRunStyle(child.formatting.styleId)
+        ? styleResolver?.getRunStyleOwnProperties(child.formatting.styleId)
         : undefined;
       const mergedFormatting = mergeTextFormatting(
         mergeTextFormatting(styleFormatting, runStyleFormatting),

@@ -280,6 +280,44 @@ function isEmptyTextRun(run: TextRun): boolean {
 }
 
 /**
+ * Sum the inline pixel widths of runs after a tab, up to (but not including)
+ * the next tab or line break. Used to reserve room for content that follows
+ * a tab when deciding the tab's own width \u2014 mirrors Word's right-aligned
+ * tab semantics where the tab shrinks so the following text ends at the
+ * tab stop position (or the right margin if the stop overshoots it).
+ *
+ * Field runs are measured with their *own* font/size, not the tab's. A
+ * PAGEREF field (the page number after a TOC leader) often renders with a
+ * different theme font than the tab \u2014 using the tab's font here under-
+ * counts and the painter's actual width drifts past what we reserved.
+ */
+function measureInlineWidthAfterTab(
+  runs: Run[],
+  tabIndex: number,
+  _fallbackStyle: FontStyle
+): number {
+  let width = 0;
+  for (let i = tabIndex + 1; i < runs.length; i++) {
+    const next = runs[i];
+    if (isTabRun(next) || isLineBreakRun(next)) break;
+    if (isTextRun(next)) {
+      width += measureTextWidth(next.text || '', runToFontStyle(next));
+    } else if (isFieldRun(next)) {
+      const style: FontStyle = {
+        fontFamily: next.fontFamily ?? DEFAULT_FONT_FAMILY,
+        fontSize: next.fontSize ?? DEFAULT_FONT_SIZE,
+        bold: next.bold,
+        italic: next.italic,
+      };
+      width += measureTextWidth(next.fallback || '1', style);
+    } else if (isImageRun(next)) {
+      width += next.width || 0;
+    }
+  }
+  return width;
+}
+
+/**
  * Find word break points in text
  * Returns array of indices where words end (after space/punctuation)
  */
@@ -606,10 +644,24 @@ export function measureParagraph(
       // Compute tab width: advance to the next tab stop position.
       const tabStops = attrs?.tabs;
       const currentPos = currentLine.width + (currentLine.leftOffset ?? 0);
-      const tabWidth = computeTabWidth(currentPos, tabStops);
+      let tabWidth = computeTabWidth(currentPos, tabStops);
+
+      // When the tab targets a position past the line edge — Word's
+      // TOC styles routinely author right tab stops a hair past the page
+      // margin — snap the tab to the margin and reserve room for the
+      // runs that follow (the page number after a TOC leader). Without
+      // this, the wrap check below trips and the next line gets the tab
+      // + page number alone, with the dots filling the whole new line.
+      if (currentPos + tabWidth > currentLine.availableWidth + WIDTH_TOLERANCE) {
+        const followingWidth = measureInlineWidthAfterTab(runs, runIndex, style);
+        const clamped = currentLine.availableWidth - currentPos - followingWidth;
+        if (clamped > 1) {
+          tabWidth = clamped;
+        }
+      }
 
       if (currentLine.width + tabWidth > currentLine.availableWidth + WIDTH_TOLERANCE) {
-        // Tab doesn't fit, start new line
+        // Tab still doesn't fit (line is already full of preceding content).
         startNewLine(runIndex, 0);
         updateMaxFont(style);
       }
