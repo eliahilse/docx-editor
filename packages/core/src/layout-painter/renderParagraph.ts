@@ -390,24 +390,17 @@ function renderTabRun(run: TabRun, doc: Document, width: number, leader?: string
   span.style.display = 'inline-block';
   span.style.width = `${width}px`;
   span.style.overflow = 'hidden';
+  span.style.whiteSpace = 'nowrap';
 
   applyPmPositions(span, run.pmStart, run.pmEnd);
 
-  // Render leader character if specified
-  if (leader && leader !== 'none') {
-    const leaderChar = getLeaderChar(leader);
-    if (leaderChar) {
-      // Fill with leader characters
-      span.style.backgroundImage = `url("data:image/svg+xml,${encodeURIComponent(
-        `<svg xmlns='http://www.w3.org/2000/svg' width='4' height='16'><text x='0' y='12' font-size='12' fill='%23000'>${leaderChar}</text></svg>`
-      )}")`;
-      span.style.backgroundRepeat = 'repeat-x';
-      span.style.backgroundPosition = 'bottom';
-    }
-  }
-
-  // Tab character for accessibility (but invisible)
-  span.textContent = '\u00A0'; // Non-breaking space for layout
+  // Render leader as repeated text characters so they sit at the run's
+  // natural text baseline (matching Word). Previously the leader was a
+  // background-image SVG positioned at the element's bottom, which drew
+  // the dots below the text. overflow:hidden clips any excess past the
+  // calculated tab width.
+  const leaderChar = leader && leader !== 'none' ? getLeaderChar(leader) : null;
+  span.textContent = leaderChar ? leaderChar.repeat(200) : '\u00A0';
 
   return span;
 }
