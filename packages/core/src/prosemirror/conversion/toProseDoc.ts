@@ -1196,14 +1196,17 @@ function convertRunContent(content: RunContent, marks: ReturnType<typeof schema.
 
     case 'break':
       if (content.breakType === 'textWrapping' || !content.breakType) {
-        return [schema.node('hardBreak')];
+        // Carry marks (including any enclosing hyperlink) so the break is
+        // recognized as inside the hyperlink on the way back out.
+        return [schema.node('hardBreak', null, undefined, marks)];
       }
       // Page breaks not supported in inline content
       return [];
 
     case 'tab':
-      // Convert to tab node for proper rendering
-      return [schema.node('tab')];
+      // Carry marks (including any enclosing hyperlink) so round-trip keeps
+      // the tab inside the hyperlink — TOC entries depend on this.
+      return [schema.node('tab', null, undefined, marks)];
 
     case 'drawing':
       if (content.image) {
@@ -1467,9 +1470,16 @@ function convertHyperlink(
 
   for (const child of hyperlink.children) {
     if (child.type === 'run') {
-      // Merge style formatting with run's inline formatting
+      // Merge style formatting with run's inline formatting. Mirror convertRun
+      // and pull *only* the character style's own properties — resolveRunStyle
+      // walks all the way up to docDefaults, and merging that on top of the
+      // already-resolved paragraph style re-introduces docDefaults' rPr (e.g.
+      // sz=24 in the parity doc) and clobbers the paragraph style's run size.
+      // TOC3 entries are wrapped in <w:hyperlink> so this path is the one
+      // that decides their font size; using resolveRunStyle here made TOC3
+      // render at the doc default 12pt instead of the TOC3 style's 10pt.
       const runStyleFormatting = child.formatting?.styleId
-        ? styleResolver?.resolveRunStyle(child.formatting.styleId)
+        ? styleResolver?.getRunStyleOwnProperties(child.formatting.styleId)
         : undefined;
       const mergedFormatting = mergeTextFormatting(
         mergeTextFormatting(styleFormatting, runStyleFormatting),
@@ -1479,10 +1489,13 @@ function convertHyperlink(
       // Add link mark to run marks
       const allMarks = [...runMarks, linkMark];
 
+      // Delegate to the shared run-content converter so tabs, line breaks,
+      // drawings, fields, footnote refs, etc. inside a hyperlink survive the
+      // conversion. Previously only `text` was emitted, which silently
+      // dropped tab runs inside TOC entries — collapsing
+      // "1[tab]Introduction[tab]5" to "1Introduction5".
       for (const content of child.content) {
-        if (content.type === 'text' && content.text) {
-          nodes.push(schema.text(content.text, allMarks));
-        }
+        nodes.push(...convertRunContent(content, allMarks));
       }
     }
   }
