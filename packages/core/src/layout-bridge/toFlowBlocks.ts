@@ -23,7 +23,6 @@ import type {
   TextRun,
   TabRun,
   ImageRun,
-  LineBreakRun,
   FieldRun,
   RunFormatting,
   ParagraphAttrs,
@@ -475,13 +474,10 @@ function paragraphToRuns(node: PMNode, startPos: number, _options: ToFlowBlocksO
   const styleId = (node.attrs as PMParagraphAttrs).styleId;
   const inTocParagraph = typeof styleId === 'string' && /^TOC\d*$/i.test(styleId);
 
-  node.forEach((child, childOffset) => {
-    const childPos = offset + childOffset;
-
+  // Single dispatcher for one inline PM child. Recurses on `sdt` so nested
+  // content controls keep contributing runs at the right pmStart/pmEnd.
+  function pushRunsForChild(child: PMNode, childPos: number): void {
     if (child.isText && child.text) {
-      // Text node — create text run. Run-level marks override paragraph
-      // defaults; the spread order below ensures `formatting`'s explicit
-      // values win over the inherited fallback.
       const formatting = extractRunFormatting(child.marks, theme);
       if (inTocParagraph && formatting.hyperlink) {
         // Strip the resolved color/underline so the painter's fallback
@@ -501,15 +497,12 @@ function paragraphToRuns(node: PMNode, startPos: number, _options: ToFlowBlocksO
       };
       runs.push(run);
     } else if (child.type.name === 'hardBreak') {
-      // Line break
-      const run: LineBreakRun = {
+      runs.push({
         kind: 'lineBreak',
         pmStart: childPos,
         pmEnd: childPos + child.nodeSize,
-      };
-      runs.push(run);
+      });
     } else if (child.type.name === 'tab') {
-      // Tab character — inherits paragraph defaults the same way text runs do.
       const formatting = extractRunFormatting(child.marks, theme);
       const run: TabRun = {
         kind: 'tab',
@@ -520,7 +513,6 @@ function paragraphToRuns(node: PMNode, startPos: number, _options: ToFlowBlocksO
       };
       runs.push(run);
     } else if (child.type.name === 'image') {
-      // Image within paragraph
       const attrs = child.attrs;
       const constrained = constrainImageToPage(
         (attrs.width as number) || 100,
@@ -534,7 +526,6 @@ function paragraphToRuns(node: PMNode, startPos: number, _options: ToFlowBlocksO
         height: constrained.height,
         alt: attrs.alt as string | undefined,
         transform: attrs.transform as string | undefined,
-        // Preserve wrap attributes for proper rendering
         wrapType: attrs.wrapType as string | undefined,
         displayMode: attrs.displayMode as 'inline' | 'block' | 'float' | undefined,
         cssFloat: attrs.cssFloat as 'left' | 'right' | 'none' | undefined,
@@ -542,7 +533,6 @@ function paragraphToRuns(node: PMNode, startPos: number, _options: ToFlowBlocksO
         distBottom: attrs.distBottom as number | undefined,
         distLeft: attrs.distLeft as number | undefined,
         distRight: attrs.distRight as number | undefined,
-        // Preserve position for page-level floating image positioning
         position: attrs.position as ImageRun['position'] | undefined,
         cropTop: attrs.cropTop as number | undefined,
         cropRight: attrs.cropRight as number | undefined,
@@ -554,7 +544,6 @@ function paragraphToRuns(node: PMNode, startPos: number, _options: ToFlowBlocksO
       };
       runs.push(run);
     } else if (child.type.name === 'field') {
-      // Field node — convert to FieldRun for render-time substitution
       const ft = child.attrs.fieldType as string;
       const mappedType: FieldRun['fieldType'] =
         ft === 'PAGE'
@@ -566,92 +555,33 @@ function paragraphToRuns(node: PMNode, startPos: number, _options: ToFlowBlocksO
               : ft === 'TIME'
                 ? 'TIME'
                 : 'OTHER';
-      const run: FieldRun = {
+      runs.push({
         kind: 'field',
         fieldType: mappedType,
         fallback: (child.attrs.displayText as string) || '',
         pmStart: childPos,
         pmEnd: childPos + child.nodeSize,
-      };
-      runs.push(run);
+      });
     } else if (child.type.name === 'math') {
-      // Math node — render as plain text fallback in layout
       const text = (child.attrs.plainText as string) || '[equation]';
-      const run: TextRun = {
+      runs.push({
         kind: 'text',
         text,
         italic: true,
         fontFamily: 'Cambria Math',
         pmStart: childPos,
         pmEnd: childPos + child.nodeSize,
-      };
-      runs.push(run);
+      });
     } else if (child.type.name === 'sdt') {
-      // SDT (Structured Document Tag / content control) — inline wrapper node.
-      // Descend into its children to extract the actual text runs.
       const sdtInnerOffset = childPos + 1; // +1 for opening tag
       child.forEach((sdtChild, sdtChildOffset) => {
-        const sdtChildPos = sdtInnerOffset + sdtChildOffset;
-        if (sdtChild.isText && sdtChild.text) {
-          const formatting = extractRunFormatting(sdtChild.marks, theme);
-          const run: TextRun = {
-            kind: 'text',
-            text: sdtChild.text,
-            ...formatting,
-            pmStart: sdtChildPos,
-            pmEnd: sdtChildPos + sdtChild.nodeSize,
-          };
-          runs.push(run);
-        } else if (sdtChild.type.name === 'hardBreak') {
-          const run: LineBreakRun = {
-            kind: 'lineBreak',
-            pmStart: sdtChildPos,
-            pmEnd: sdtChildPos + sdtChild.nodeSize,
-          };
-          runs.push(run);
-        } else if (sdtChild.type.name === 'tab') {
-          const formatting = extractRunFormatting(sdtChild.marks, theme);
-          const run: TabRun = {
-            kind: 'tab',
-            ...formatting,
-            pmStart: sdtChildPos,
-            pmEnd: sdtChildPos + sdtChild.nodeSize,
-          };
-          runs.push(run);
-        } else if (sdtChild.type.name === 'image') {
-          const attrs = sdtChild.attrs;
-          const sdtConstrained = constrainImageToPage(
-            (attrs.width as number) || 100,
-            (attrs.height as number) || 100,
-            _options.pageContentHeight
-          );
-          const run: ImageRun = {
-            kind: 'image',
-            src: attrs.src as string,
-            width: sdtConstrained.width,
-            height: sdtConstrained.height,
-            alt: attrs.alt as string | undefined,
-            transform: attrs.transform as string | undefined,
-            wrapType: attrs.wrapType as string | undefined,
-            displayMode: attrs.displayMode as 'inline' | 'block' | 'float' | undefined,
-            cssFloat: attrs.cssFloat as 'left' | 'right' | 'none' | undefined,
-            distTop: attrs.distTop as number | undefined,
-            distBottom: attrs.distBottom as number | undefined,
-            distLeft: attrs.distLeft as number | undefined,
-            distRight: attrs.distRight as number | undefined,
-            position: attrs.position as ImageRun['position'] | undefined,
-            cropTop: attrs.cropTop as number | undefined,
-            cropRight: attrs.cropRight as number | undefined,
-            cropBottom: attrs.cropBottom as number | undefined,
-            cropLeft: attrs.cropLeft as number | undefined,
-            opacity: attrs.opacity as number | undefined,
-            pmStart: sdtChildPos,
-            pmEnd: sdtChildPos + sdtChild.nodeSize,
-          };
-          runs.push(run);
-        }
+        pushRunsForChild(sdtChild, sdtInnerOffset + sdtChildOffset);
       });
     }
+  }
+
+  node.forEach((child, childOffset) => {
+    pushRunsForChild(child, offset + childOffset);
   });
 
   return runs;
@@ -1360,6 +1290,16 @@ function convertTextBoxNode(
       right: (attrs.marginRight as number) ?? DEFAULT_TEXTBOX_MARGINS.right,
     },
     content: contentBlocks,
+    displayMode: attrs.displayMode as TextBoxBlock['displayMode'],
+    cssFloat: attrs.cssFloat as TextBoxBlock['cssFloat'],
+    wrapType: attrs.wrapType as string | undefined,
+    wrapText: attrs.wrapText as TextBoxBlock['wrapText'],
+    anchorTarget: attrs.anchorTarget as TextBoxBlock['anchorTarget'],
+    position: attrs.position as TextBoxBlock['position'],
+    distTop: attrs.distTop as number | undefined,
+    distBottom: attrs.distBottom as number | undefined,
+    distLeft: attrs.distLeft as number | undefined,
+    distRight: attrs.distRight as number | undefined,
     pmStart: startPos,
     pmEnd: startPos + node.nodeSize,
   };

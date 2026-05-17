@@ -152,6 +152,8 @@ export type ImageRunPosition = {
   };
 };
 
+export type WrapTextDirection = 'bothSides' | 'left' | 'right' | 'largest';
+
 /**
  * An inline image run.
  */
@@ -513,12 +515,37 @@ export type TextBoxBlock = {
   margins?: { top: number; bottom: number; left: number; right: number };
   /** Paragraph blocks inside the text box */
   content: ParagraphBlock[];
+  /** Display mode copied from the ProseMirror text box node */
+  displayMode?: 'inline' | 'float' | 'block';
+  /** CSS float direction copied from the ProseMirror text box node */
+  cssFloat?: 'left' | 'right' | 'none';
+  /** OOXML wrap type for anchored text boxes */
+  wrapType?: string;
+  /** OOXML wrapText direction */
+  wrapText?: WrapTextDirection;
+  /** Anchor target used during DOCX import/export */
+  anchorTarget?: 'followingBlock';
+  /** Position for floating/anchored text boxes */
+  position?: ImageRunPosition;
+  /** Wrap distances in pixels */
+  distTop?: number;
+  distBottom?: number;
+  distLeft?: number;
+  distRight?: number;
   pmStart?: number;
   pmEnd?: number;
 };
 
 /**
- * Union of all flow block types (input to layout engine).
+ * Union of every block kind the layout engine knows about.
+ *
+ * Three switches over `block.kind` must stay in sync with this type:
+ * - `runLayoutPipeline` in `layout-engine/index.ts` (this package)
+ * - `measureBlock` in `packages/react/src/paged-editor/PagedEditor.tsx`
+ * - `measureBlock` in `packages/vue/src/composables/useDocxEditor.ts`
+ *
+ * All three end in `assertExhaustiveFlowBlock(block, '<site>')` so adding
+ * a new variant here without updating every site is a typecheck error.
  */
 export type FlowBlock =
   | ParagraphBlock
@@ -528,6 +555,21 @@ export type FlowBlock =
   | SectionBreakBlock
   | PageBreakBlock
   | ColumnBreakBlock;
+
+/**
+ * Exhaustiveness guard for `FlowBlock`-shaped switches. Call from the
+ * `default` arm with the still-typed value; TypeScript will refuse to
+ * compile if any variant of `FlowBlock` was missed. The thrown error
+ * names the calling site so runtime failures (e.g. an old adapter
+ * compiled against a newer core) point future debuggers at the contract.
+ */
+export function assertExhaustiveFlowBlock(block: never, site: string): never {
+  const kind = (block as { kind?: string }).kind ?? '<unknown>';
+  throw new Error(
+    `${site}: unhandled FlowBlock kind "${kind}". ` +
+      `Add the case alongside the other FlowBlock switches (see types.ts).`
+  );
+}
 
 // =============================================================================
 // MEASURES - Measurement results for blocks
@@ -557,6 +599,18 @@ export type MeasuredLine = {
   leftOffset?: number;
   /** Right offset from floating images (pixels from content right edge). */
   rightOffset?: number;
+  /** Optional split segments for centered floating exclusions. */
+  segments?: MeasuredLineSegment[];
+};
+
+export type MeasuredLineSegment = {
+  fromRun: number;
+  fromChar: number;
+  toRun: number;
+  toChar: number;
+  width: number;
+  leftOffset: number;
+  availableWidth: number;
 };
 
 /**
@@ -733,6 +787,10 @@ export type TextBoxFragment = FragmentBase & {
   kind: 'textBox';
   /** Height of the text box. */
   height: number;
+  /** True when positioned outside normal document flow. */
+  isFloating?: boolean;
+  /** Stack order hint for anchored text boxes. */
+  zIndex?: number;
 };
 
 /**
