@@ -74,10 +74,22 @@ export function toProseDoc(document: Document, options?: ToProseDocOptions): PMN
 
   for (const block of paragraphs) {
     if (block.type === 'paragraph') {
+      // Where in the paragraph does `<w:br type="page"/>` fall?
+      //   - 'leading'  : break appears before any visible content → paragraph
+      //                  text goes on the new page (Word's behaviour for
+      //                  `<w:r><w:br type="page"/></w:r><w:r><w:t>...</w:t></w:r>`,
+      //                  common in TOC + chapter headings)
+      //   - 'trailing' : break appears at/after some visible content → next
+      //                  paragraph goes on the new page
+      //   - null       : no break in this paragraph
+      const breakPosition = paragraphPageBreakPosition(block);
+
+      if (breakPosition === 'leading') {
+        nodes.push(schema.node('pageBreak'));
+      }
       // Convert paragraph and extract text boxes as sibling nodes
       nodes.push(...convertParagraphWithTextBoxes(block, styleResolver));
-      // If any run in this paragraph contains a page break, emit a pageBreak node after
-      if (paragraphHasPageBreak(block)) {
+      if (breakPosition === 'trailing') {
         nodes.push(schema.node('pageBreak'));
       }
     } else if (block.type === 'table') {
@@ -1941,51 +1953,77 @@ export function footnoteToProseDoc(
 }
 
 /**
- * Returns true when `<w:br w:type="page"/>` appears anywhere in a paragraph.
+ * Locate `<w:br w:type="page"/>` within a paragraph and report whether it
+ * appears before any visible content (`'leading'`) or after some visible
+ * content (`'trailing'`). Returns `null` when no page break is present.
  *
- * A hard page break is always a forced break per ECMA-376 §17.3.3.1. We used
- * to require visible content before the break (and rely on
- * `renderedPageBreakBefore` for leading breaks), but that attr is informational
- * only and not honored at layout, so a break-only paragraph (empty paragraph
- * containing just `<w:r><w:br w:type="page"/></w:r>`) silently dropped its
- * forced break — Word renders such paragraphs with the next paragraph on a
- * fresh page.
+ * A hard page break is always a forced break per ECMA-376 §17.3.3.1. Word's
+ * rendering depends on the break's position within the paragraph:
+ *
+ *   - Break before any visible text → paragraph's visible content goes onto
+ *     the new page (Word's "chapter heading" pattern:
+ *     `<w:r><w:br type="page"/></w:r><w:r><w:t>Heading</w:t></w:r>`).
+ *   - Break after some visible content (or in an otherwise-empty break-only
+ *     paragraph) → the following paragraph starts on the new page.
+ *
+ * Emitting the synthetic `pageBreak` sibling in the matching position
+ * preserves Word's layout. Treating every break as trailing made
+ * "leading-break" paragraphs render the heading at the bottom of the prior
+ * page and the next content (a table, an empty paragraph) at the top of a
+ * new page — visually identical to a blank page below the heading.
  */
-function paragraphHasPageBreak(paragraph: Paragraph): boolean {
-  function visitRunContent(content: RunContent): boolean {
-    return content.type === 'break' && content.breakType === 'page';
-  }
+type PageBreakPosition = 'leading' | 'trailing' | null;
 
-  function visit(item: Paragraph['content'][number]): boolean {
-    if (item.type === 'run') {
-      for (const c of (item as Run).content) {
-        if (visitRunContent(c)) return true;
-      }
-      return false;
-    }
-    if (item.type === 'hyperlink') {
-      for (const r of (item as Hyperlink).children) {
-        if (r.type === 'run' && visit(r)) return true;
-      }
-      return false;
-    }
-    if (item.type === 'insertion' || item.type === 'deletion') {
-      // Tracked-change wrappers can themselves contain a page break.
-      // Descend so a break inside <w:ins> or <w:del> still emits a
-      // pageBreak node downstream.
-      const tc = item as { content: Paragraph['content'] };
-      for (const inner of tc.content) {
-        if (visit(inner)) return true;
-      }
-      return false;
-    }
+function paragraphPageBreakPosition(paragraph: Paragraph): PageBreakPosition {
+  // Tracks the "did we see visible content yet?" flag during the walk.
+  // Run content that produces no visible glyph (the break itself, bookmarks,
+  // empty rPr, etc.) does not flip this on.
+  let sawVisible = false;
+  let result: PageBreakPosition = null;
+
+  function isVisibleRunContent(content: RunContent): boolean {
+    if (content.type === 'text') return (content.text ?? '').length > 0;
+    if (content.type === 'tab') return true;
+    if (content.type === 'drawing' || content.type === 'shape') return true;
+    if (content.type === 'symbol') return true;
+    if (content.type === 'softHyphen' || content.type === 'noBreakHyphen') return true;
     return false;
   }
 
-  for (const item of paragraph.content) {
-    if (visit(item)) return true;
+  function visit(item: Paragraph['content'][number]): void {
+    if (result) return;
+    if (item.type === 'run') {
+      for (const c of (item as Run).content) {
+        if (c.type === 'break' && c.breakType === 'page') {
+          result = sawVisible ? 'trailing' : 'leading';
+          return;
+        }
+        if (isVisibleRunContent(c)) sawVisible = true;
+      }
+      return;
+    }
+    if (item.type === 'hyperlink') {
+      for (const r of (item as Hyperlink).children) {
+        if (r.type === 'run') visit(r);
+        if (result) return;
+      }
+      return;
+    }
+    if (item.type === 'insertion' || item.type === 'deletion') {
+      // Tracked-change wrappers can themselves contain a page break.
+      const tc = item as { content: Paragraph['content'] };
+      for (const inner of tc.content) {
+        visit(inner);
+        if (result) return;
+      }
+    }
   }
-  return false;
+
+  for (const item of paragraph.content) {
+    visit(item);
+    if (result) return result;
+  }
+  return null;
 }
 
 /**
