@@ -1,14 +1,7 @@
 /**
- * Regression — text-box drawings wrapped in mc:AlternateContent.
- *
- * Word emits anchored WPS text boxes (the cards used for org charts,
- * pull-quote callouts, etc.) inside an mc:AlternateContent block:
- *   mc:Choice Requires="wps" holds the modern wps:wsp shape, and
- *   mc:Fallback holds a VML rendering for legacy consumers.
- *
- * enrichParagraphTextBoxes used to walk only the direct children of
- * <w:r>, so the <w:drawing> inside the Choice branch never reached the
- * text-box pipeline and the shape's text was silently dropped on parse.
+ * Regression — anchored wps:wsp text boxes wrapped in
+ * <mc:AlternateContent><mc:Choice Requires="wps">...</mc:Choice></mc:AlternateContent>
+ * must reach the text-box pipeline (not just direct <w:r> children).
  */
 
 import { describe, expect, test } from 'bun:test';

@@ -1,11 +1,7 @@
 /**
- * Create a synthetic DOCX fixture for the AlternateContent text-box extraction.
- *
- * The generated document has a single paragraph whose run contains an
- * <mc:AlternateContent> wrapping a <wps:wsp> floating text box. The wps
- * branch is the modern Choice; a tiny VML Fallback is included so the file
- * is shaped like Word's real output. Without the parser fix the text box
- * is invisible because nothing walks into the Choice branch.
+ * Synthetic DOCX fixture: a paragraph whose run contains an
+ * <mc:AlternateContent> wrapping a wps:wsp floating text box, with a
+ * tiny VML Fallback to mirror Word's shape.
  *
  * Run: bun scripts/create-alternatecontent-textbox-fixture.mjs
  */

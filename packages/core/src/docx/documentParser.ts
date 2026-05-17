@@ -267,13 +267,8 @@ function enrichParagraphTextBoxes(
   // Track which run we're on (to match XML runs with parsed runs)
   let runIndex = 0;
 
-  // Drawings carrying a wps:wsp text box are sometimes wrapped in
-  // <mc:AlternateContent><mc:Choice Requires="wps"><w:drawing>...</w:drawing></mc:Choice>
-  // <mc:Fallback>...VML...</mc:Fallback></mc:AlternateContent>. The wps Choice
-  // branch holds the modern shape that this code knows how to parse; the
-  // Fallback is legacy VML. Walk both layers so floating-anchored text boxes
-  // (e.g. Word's "draw a text box" cards used for org charts) reach the
-  // text-box pipeline instead of being silently dropped.
+  // Walk into <mc:AlternateContent> wrappers too: Word stores anchored
+  // wps:wsp text boxes inside Choice Requires="wps" (Fallback is VML).
   function processDrawing(drawingEl: XmlElement): void {
     if (!isTextBoxDrawing(drawingEl)) return;
 
@@ -316,16 +311,12 @@ function enrichParagraphTextBoxes(
 
     const shapeContent: ShapeContent = { type: 'shape', shape };
 
-    // Inject ShapeContent into the closest available parsed run. The parser
-    // collapses empty <w:r> elements (e.g. runs that hold only an
-    // <mc:AlternateContent> wrapper) into fewer Run objects than the XML
-    // contains, so a strict `runIndex < paragraph.content.length` check
-    // drops every shape past the first into the void. For floating text
-    // boxes — anchored via wp:positionH/V — the run they live in doesn't
-    // affect their on-page position, so we clamp to the last available run.
+    // Clamp to the last parsed run: runIndex can outrun paragraph.content
+    // when an <w:r> contributes nothing parseable. Best-effort attachment —
+    // anchored boxes are off-flow, so the owning run matters less than
+    // keeping the shape from being dropped.
     let targetIdx = runIndex;
     if (targetIdx >= paragraph.content.length) {
-      // Find the last run in the paragraph content (if any)
       targetIdx = -1;
       for (let i = paragraph.content.length - 1; i >= 0; i--) {
         if (paragraph.content[i].type === 'run') {
