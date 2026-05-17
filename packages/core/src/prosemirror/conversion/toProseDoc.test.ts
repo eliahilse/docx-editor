@@ -271,10 +271,6 @@ describe('toProseDoc ↔ fromProseDoc round-trip — theme shading preservation'
 });
 
 describe('toProseDoc — hyperlink preserves non-text inline content', () => {
-  // TOC entries wrap "[number][tab][title][tab][page]" in one <w:hyperlink>.
-  // Both directions of the converter must keep the tabs — previously the
-  // hyperlink branch only emitted text, collapsing the entry to
-  // "1Introduction5" and dropping the dot leader.
   test('tabs inside a hyperlink survive Document → PM → Document round-trip', () => {
     const inDoc: Document = {
       package: {

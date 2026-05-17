@@ -347,20 +347,15 @@ function renderTextRun(run: TextRun, doc: Document, resolvedCommentIds?: Set<num
     }
     anchor.textContent = run.text;
 
-    // Inherit from the wrapping span so the run's resolved color and
-    // text-decoration (already applied by applyRunStyles, including any
-    // Hyperlink character-style overrides) are the single source of truth.
-    // Previously we hardcoded text-decoration: underline AND a blue color
-    // on the anchor, which compounded with whatever was on the span and
-    // drew the underline twice for TOC entries.
+    // Inherit color/text-decoration from the wrapping span so the resolved
+    // run style (already applied by applyRunStyles) is the single source of
+    // truth. Fall back to Word's default hyperlink styling only when the
+    // run has no resolved color/underline, e.g. a bare `<w:hyperlink>`
+    // without `<w:rStyle w:val="Hyperlink"/>`. `run.hyperlink.noDefaultStyle`
+    // opts out — see HyperlinkInfo for who sets it.
     anchor.style.color = 'inherit';
     anchor.style.textDecoration = 'inherit';
 
-    // Fall back to Word's default hyperlink styling only when the run has
-    // no resolved color/underline from a character style (e.g. a bare
-    // <w:hyperlink> without <w:rStyle w:val="Hyperlink"/>). Hyperlinks
-    // inside TOC paragraphs opt out via `noDefaultStyle` (set by the
-    // layout-bridge) — Word renders them in the TOCx paragraph color.
     if (!run.hyperlink.noDefaultStyle) {
       if (!run.color) {
         anchor.style.color = '#0563c1';

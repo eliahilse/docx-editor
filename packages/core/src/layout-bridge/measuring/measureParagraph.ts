@@ -284,18 +284,10 @@ function isEmptyTextRun(run: TextRun): boolean {
  * the next tab or line break. Used to reserve room for content that follows
  * a tab when deciding the tab's own width \u2014 mirrors Word's right-aligned
  * tab semantics where the tab shrinks so the following text ends at the
- * tab stop position (or the right margin if the stop overshoots it).
- *
- * Field runs are measured with their *own* font/size, not the tab's. A
- * PAGEREF field (the page number after a TOC leader) often renders with a
- * different theme font than the tab \u2014 using the tab's font here under-
- * counts and the painter's actual width drifts past what we reserved.
+ * tab stop position. Field runs measure with their own font/size, not the
+ * tab's, so widths reserved here match what the painter actually draws.
  */
-function measureInlineWidthAfterTab(
-  runs: Run[],
-  tabIndex: number,
-  _fallbackStyle: FontStyle
-): number {
+function measureInlineWidthAfterTab(runs: Run[], tabIndex: number): number {
   let width = 0;
   for (let i = tabIndex + 1; i < runs.length; i++) {
     const next = runs[i];
@@ -653,7 +645,7 @@ export function measureParagraph(
       // this, the wrap check below trips and the next line gets the tab
       // + page number alone, with the dots filling the whole new line.
       if (currentPos + tabWidth > currentLine.availableWidth + WIDTH_TOLERANCE) {
-        const followingWidth = measureInlineWidthAfterTab(runs, runIndex, style);
+        const followingWidth = measureInlineWidthAfterTab(runs, runIndex);
         const clamped = currentLine.availableWidth - currentPos - followingWidth;
         if (clamped > 1) {
           tabWidth = clamped;

@@ -1,16 +1,3 @@
-/**
- * Bridge-level TOC compat heuristic — hyperlinks inside TOC* paragraphs.
- *
- * Word renders TOC field entries in the TOCx paragraph color rather than the
- * Hyperlink character style's blue + underline. The bridge encodes that as:
- *   - strip resolved `color` and `underline` from the run
- *   - set `hyperlink.noDefaultStyle = true` so the painter skips its
- *     "Word default" link-styling fallback
- *
- * The PM doc itself keeps the original marks so copy/paste out of a TOC
- * carries the character-style decoration the same way Word does.
- */
-
 import { describe, test, expect } from 'bun:test';
 import { Schema } from 'prosemirror-model';
 import { toFlowBlocks } from '../toFlowBlocks';

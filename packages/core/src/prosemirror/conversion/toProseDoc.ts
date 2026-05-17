@@ -1480,11 +1480,8 @@ function convertHyperlink(
       // Add link mark to run marks
       const allMarks = [...runMarks, linkMark];
 
-      // Delegate to the shared run-content converter so tabs, line breaks,
-      // drawings, fields, footnote refs, etc. inside a hyperlink survive the
-      // conversion. Previously only `text` was emitted, which silently
-      // dropped tab runs inside TOC entries — collapsing
-      // "1[tab]Introduction[tab]5" to "1Introduction5".
+      // Delegate to convertRunContent so tabs, breaks, drawings, fields,
+      // footnote refs etc. inside a hyperlink round-trip.
       for (const content of child.content) {
         nodes.push(...convertRunContent(content, allMarks));
       }
