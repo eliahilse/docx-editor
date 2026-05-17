@@ -960,6 +960,7 @@ export function renderLine(
         : effectiveAlign === 'right'
           ? 'flex-end'
           : 'flex-start';
+    lineEl.dataset.flexLine = 'true';
   }
 
   // Handle empty lines
@@ -1087,6 +1088,7 @@ export function renderLine(
         lineEl.style.alignItems = 'baseline';
         lineEl.style.whiteSpace = 'nowrap';
         lineEl.style.textIndent = '0';
+        lineEl.dataset.flexLine = 'true';
         if (
           options?.isFirstLine &&
           options.firstLineIndentPx &&
@@ -1129,7 +1131,6 @@ export function renderLine(
           }
         }
 
-        currentX = lineRightEdgeX !== undefined ? lineRightEdgeX : currentX;
         break;
       }
 
@@ -1532,12 +1533,11 @@ export function renderParagraphFragment(
     const hasHanging = indent?.hanging && indent.hanging > 0;
     const hasFirstLine = indent?.firstLine && indent.firstLine > 0;
     // If renderLine promoted this line to flex (right-tab anchor pattern),
-    // text-indent must not be applied: it would shift the first inline
-    // content INSIDE EACH flex item, including the page number's anchor,
-    // pulling the page number left by `hanging` and inset of the line edge.
-    // The hanging offset is re-applied as margin-left on the first item
-    // there instead.
-    const isFlexLine = lineEl.style.display === 'flex';
+    // text-indent must not be applied to flex lines: it would shift the
+    // first inline content INSIDE EACH flex item (e.g. the page number's
+    // anchor), pulling it left by `hanging`. Right-tab anchored lines
+    // re-apply the hanging offset as margin-left on the first item.
+    const isFlexLine = lineEl.dataset.flexLine === 'true';
 
     if (isFirstLine) {
       // First line handling
