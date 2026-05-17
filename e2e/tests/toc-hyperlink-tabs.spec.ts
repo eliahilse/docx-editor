@@ -20,12 +20,8 @@ test('hyperlink-wrapped TOC entry preserves tab runs between number, title, and 
 }) => {
   const editor = new EditorPage(page);
   await editor.goto();
-  await editor.waitForReady();
-
-  await page.locator('input[type="file"][accept=".docx"]').setInputFiles(`e2e/${FIXTURE}`);
-  await page.waitForSelector('.paged-editor__pages');
+  await editor.loadDocxFile(FIXTURE);
   await page.waitForSelector('[data-page-number="1"]');
-  await page.waitForTimeout(1500);
 
   const page1 = page.locator('[data-page-number="1"]');
 

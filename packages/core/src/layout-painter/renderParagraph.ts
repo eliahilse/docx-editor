@@ -393,7 +393,7 @@ function renderTabRun(run: TabRun, doc: Document, width: number, leader?: string
     // The leader must sit on the surrounding text's baseline. Two CSS
     // pitfalls collide here:
     //   1. An inline-block with `overflow: hidden` reports its baseline
-    //      as the bottom margin edge \u2014 the line then aligns surrounding
+    //      as the bottom margin edge — the line then aligns surrounding
     //      text to that bottom, shifting the title up and stranding the
     //      dots visually below it.
     //   2. A long run of dot characters expands the inline-block past
@@ -419,7 +419,7 @@ function renderTabRun(run: TabRun, doc: Document, width: number, leader?: string
     inner.textContent = leaderChar.repeat(200);
     span.appendChild(inner);
   } else {
-    // No leader \u2014 a single nbsp carries the line-height for layout.
+    // No leader — a single nbsp carries the line-height for layout.
     span.textContent = '\u00A0';
   }
 

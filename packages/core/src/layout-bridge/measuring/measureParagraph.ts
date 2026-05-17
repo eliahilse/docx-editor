@@ -282,7 +282,7 @@ function isEmptyTextRun(run: TextRun): boolean {
 /**
  * Sum the inline pixel widths of runs after a tab, up to (but not including)
  * the next tab or line break. Used to reserve room for content that follows
- * a tab when deciding the tab's own width \u2014 mirrors Word's right-aligned
+ * a tab when deciding the tab's own width — mirrors Word's right-aligned
  * tab semantics where the tab shrinks so the following text ends at the
  * tab stop position. Field runs measure with their own font/size, not the
  * tab's, so widths reserved here match what the painter actually draws.
