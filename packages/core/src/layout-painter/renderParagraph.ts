@@ -347,12 +347,9 @@ function renderTextRun(run: TextRun, doc: Document, resolvedCommentIds?: Set<num
     }
     anchor.textContent = run.text;
 
-    // Inherit color/text-decoration from the wrapping span so the resolved
-    // run style (already applied by applyRunStyles) is the single source of
-    // truth. Fall back to Word's default hyperlink styling only when the
-    // run has no resolved color/underline, e.g. a bare `<w:hyperlink>`
-    // without `<w:rStyle w:val="Hyperlink"/>`. `run.hyperlink.noDefaultStyle`
-    // opts out — see HyperlinkInfo for who sets it.
+    // Inherit from the wrapping span (already styled by applyRunStyles). Fall
+    // back to Word-default blue/underline only when nothing was resolved and
+    // the source didn't opt out via HyperlinkInfo.noDefaultStyle (TOC runs).
     anchor.style.color = 'inherit';
     anchor.style.textDecoration = 'inherit';
 
@@ -390,21 +387,10 @@ function renderTabRun(run: TabRun, doc: Document, width: number, leader?: string
   const leaderChar = leader && leader !== 'none' ? getLeaderChar(leader) : null;
 
   if (leaderChar) {
-    // The leader must sit on the surrounding text's baseline. Two CSS
-    // pitfalls collide here:
-    //   1. An inline-block with `overflow: hidden` reports its baseline
-    //      as the bottom margin edge — the line then aligns surrounding
-    //      text to that bottom, shifting the title up and stranding the
-    //      dots visually below it.
-    //   2. A long run of dot characters expands the inline-block past
-    //      the calculated tab width, bleeding into the page-number slot.
-    // Keep the outer at `overflow: visible` so its baseline stays glued
-    // to its content (a zero-width space inheriting the surrounding
-    // font). Put the dots in an absolutely positioned inner span sized
-    // to the outer (top/right/bottom/left = 0) and clip there. The
-    // inner's text baseline lands at the same y as the outer's, so the
-    // dots sit on the line baseline; overflow:hidden on the inner only
-    // clips horizontally without affecting any baseline math.
+    // Outer span holds a zero-width space so its baseline aligns with the
+    // surrounding text. Inner absolutely-positioned span carries the dots
+    // and clips horizontally — keeping `overflow: hidden` off the outer
+    // avoids the inline-block baseline-at-margin-edge problem.
     span.style.position = 'relative';
     span.textContent = '\u200B';
 
@@ -758,13 +744,10 @@ interface RenderLineOptions {
   /** Track inline image runs already rendered in this paragraph fragment to prevent duplicates */
   renderedInlineImageKeys?: Set<string>;
   /**
-   * Absolute x of the line's right edge in content-area coordinates — i.e.
-   * the rightmost x where inline content may render. Computed by
-   * renderParagraphFragment from `fragment.width - indentRight - lineRightOffset`.
-   * Used by the right-tab clamp to anchor the page number to the page margin
-   * regardless of the paragraph's left indent / hanging — composing it from
-   * `leftIndentPx + availableWidth` drifts because `availableWidth` is the
-   * line-content width (excluding the hung-out region) for some inputs.
+   * Rightmost x where inline content may render, in content-area coords. Used
+   * by the right-tab anchor; passed in directly (rather than recomposed from
+   * `leftIndentPx + availableWidth`) because `availableWidth` excludes the
+   * hung-out region for some inputs and would drift.
    */
   lineRightEdgePx?: number;
 }
@@ -824,15 +807,9 @@ function getTextAfterTab(runs: Run[], tabRunIndex: number, context?: RenderConte
 }
 
 /**
- * Sum the rendered pixel widths of runs that follow a tab, up to the next
- * tab or line break. Mirrors what the painter will actually draw for each
- * run — measuring per-run with the run's own font/size — so the tab-width
- * clamp reserves the exact space the trailing content needs. Flattening
- * the trailing runs into one string and measuring with a default font (as
- * `getTextAfterTab` + `measureText(string)` does) drifts whenever the
- * trailing run uses a different font/size than the default (e.g. TOC page
- * numbers rendered with the majorHAnsi heading font), so the page number's
- * right edge lands a few pixels off per entry.
+ * Sum the pixel widths of runs that follow a tab, up to the next tab or line
+ * break. Measures per-run so the tab clamp reserves exact space when trailing
+ * runs use a different font/size from the default (e.g. TOC page numbers).
  */
 function measureFollowingContentWidth(
   runs: Run[],
@@ -1055,22 +1032,16 @@ export function renderLine(
       // Calculate tab width based on current position
       const tabResult = calculateTabWidth(currentX, tabContext, followingText, measureText);
 
-      // Right-tab anchor (TOC pattern). When the tab is end-aligned and its
-      // stop sits at/past the line's right edge, we let flex layout pin the
-      // trailing content to the right margin instead of computing widths.
-      // Set this tab to `flex: 1` so it absorbs all the remaining line
-      // space; the trailing runs (page number) become flex items at their
-      // natural widths and land flush against the line's right edge.
-      // Sidesteps every source of canvas-vs-DOM measurement drift.
+      // Right-tab anchor (TOC pattern): when an end-aligned tab's stop is at
+      // the line's right edge, let flex layout pin the trailing content there
+      // (tab gets flex: 1) — sidesteps canvas-vs-DOM measurement drift.
       const lineRightEdgeX = options?.lineRightEdgePx;
       const followingWidthForCheck =
         lineRightEdgeX !== undefined
           ? measureFollowingContentWidth(runsForLine, i, measureText, options?.context)
           : 0;
-      // Only promote when the right tab is the LAST tab on the line. Trailing
-      // tabs after a right-anchored item have no place to go in flex layout
-      // (they'd push the anchored item left), so we fall through to the
-      // non-flex clamp path and accept whatever Word does there.
+      // Gated to the last tab on the line — trailing tabs after a flex-anchored
+      // item would push the anchor left.
       let hasFollowingTab = false;
       for (let j = i + 1; j < runsForLine.length; j++) {
         if (isLineBreakRun(runsForLine[j])) break;
@@ -1086,17 +1057,10 @@ export function renderLine(
         currentX + tabResult.width + followingWidthForCheck >= lineRightEdgeX - 0.5;
 
       if (useRightAnchor) {
-        // Promote the line to flex. Two CSS gotchas to handle:
-        //   1. text-indent doesn't shift flex items as a group — it
-        //      applies to the FIRST line of inline content INSIDE EACH
-        //      flex item. With a hanging indent (text-indent: -hanging),
-        //      every text-containing flex item, including the page
-        //      number, gets its content pulled left by `hanging`, so
-        //      the page number renders ~30px shy of the line's right
-        //      edge. Strip text-indent here and re-apply the hanging
-        //      offset via margin-left on the actual first item.
-        //   2. white-space: pre is irrelevant once items are flex; use
-        //      nowrap so the trailing items don't wrap mid-line.
+        // text-indent applies per flex item (not to the group), so a hanging
+        // indent would pull every text-containing item left, including the
+        // page number. Strip it here and re-apply as margin-left on the first
+        // child. white-space: nowrap stops trailing items wrapping mid-line.
         lineEl.style.display = 'flex';
         lineEl.style.alignItems = 'baseline';
         lineEl.style.whiteSpace = 'nowrap';

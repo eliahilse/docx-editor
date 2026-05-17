@@ -281,11 +281,8 @@ function isEmptyTextRun(run: TextRun): boolean {
 
 /**
  * Sum the inline pixel widths of runs after a tab, up to (but not including)
- * the next tab or line break. Used to reserve room for content that follows
- * a tab when deciding the tab's own width — mirrors Word's right-aligned
- * tab semantics where the tab shrinks so the following text ends at the
- * tab stop position. Field runs measure with their own font/size, not the
- * tab's, so widths reserved here match what the painter actually draws.
+ * the next tab or line break. Measured per-run so widths reserved match what
+ * the painter draws even when trailing runs use different fonts/sizes.
  */
 function measureInlineWidthAfterTab(runs: Run[], tabIndex: number): number {
   let width = 0;
