@@ -267,57 +267,100 @@ function enrichParagraphTextBoxes(
   // Track which run we're on (to match XML runs with parsed runs)
   let runIndex = 0;
 
+  // Drawings carrying a wps:wsp text box are sometimes wrapped in
+  // <mc:AlternateContent><mc:Choice Requires="wps"><w:drawing>...</w:drawing></mc:Choice>
+  // <mc:Fallback>...VML...</mc:Fallback></mc:AlternateContent>. The wps Choice
+  // branch holds the modern shape that this code knows how to parse; the
+  // Fallback is legacy VML. Walk both layers so floating-anchored text boxes
+  // (e.g. Word's "draw a text box" cards used for org charts) reach the
+  // text-box pipeline instead of being silently dropped.
+  function processDrawing(drawingEl: XmlElement): void {
+    if (!isTextBoxDrawing(drawingEl)) return;
+
+    const textBox = parseTextBox(drawingEl);
+    if (!textBox) return;
+
+    // Navigate to wps:wsp to get the txbxContent element
+    const wsp = findDeep(drawingEl, 'wps', 'wsp');
+    if (wsp) {
+      const txbxContentEl = getTextBoxContentElement(wsp);
+      if (txbxContentEl) {
+        textBox.content = parseTextBoxContent(
+          txbxContentEl,
+          parseParagraph,
+          null, // table parser not needed for most text boxes
+          styles,
+          theme,
+          numbering,
+          rels ?? undefined,
+          media ?? undefined
+        );
+      }
+    }
+
+    // Convert to Shape with textBody and inject as ShapeContent
+    const shape: Shape = {
+      type: 'shape',
+      shapeType: 'rect',
+      size: textBox.size,
+      position: textBox.position,
+      wrap: textBox.wrap,
+      fill: textBox.fill,
+      outline: textBox.outline,
+      textBody: {
+        content: textBox.content,
+        margins: textBox.margins,
+      },
+    };
+    if (textBox.id) shape.id = textBox.id;
+
+    const shapeContent: ShapeContent = { type: 'shape', shape };
+
+    // Inject ShapeContent into the closest available parsed run. The parser
+    // collapses empty <w:r> elements (e.g. runs that hold only an
+    // <mc:AlternateContent> wrapper) into fewer Run objects than the XML
+    // contains, so a strict `runIndex < paragraph.content.length` check
+    // drops every shape past the first into the void. For floating text
+    // boxes — anchored via wp:positionH/V — the run they live in doesn't
+    // affect their on-page position, so we clamp to the last available run.
+    let targetIdx = runIndex;
+    if (targetIdx >= paragraph.content.length) {
+      // Find the last run in the paragraph content (if any)
+      targetIdx = -1;
+      for (let i = paragraph.content.length - 1; i >= 0; i--) {
+        if (paragraph.content[i].type === 'run') {
+          targetIdx = i;
+          break;
+        }
+      }
+    }
+    if (targetIdx >= 0) {
+      const parsedContent = paragraph.content[targetIdx];
+      if (parsedContent.type === 'run') {
+        parsedContent.content.push(shapeContent);
+      }
+    }
+  }
+
   for (const xmlChild of xmlChildren) {
     if (getLocalName(xmlChild.name ?? '') !== 'r') continue;
 
-    // Find w:drawing children in this run
     const runElements = getChildElements(xmlChild);
     for (const runEl of runElements) {
-      if (getLocalName(runEl.name ?? '') === 'drawing' && isTextBoxDrawing(runEl)) {
-        // Parse the text box structure
-        const textBox = parseTextBox(runEl);
-        if (textBox) {
-          // Navigate to wps:wsp to get the txbxContent element
-          const wsp = findDeep(runEl, 'wps', 'wsp');
-          if (wsp) {
-            const txbxContentEl = getTextBoxContentElement(wsp);
-            if (txbxContentEl) {
-              textBox.content = parseTextBoxContent(
-                txbxContentEl,
-                parseParagraph,
-                null, // table parser not needed for most text boxes
-                styles,
-                theme,
-                numbering,
-                rels ?? undefined,
-                media ?? undefined
-              );
-            }
-          }
-
-          // Convert to Shape with textBody and inject as ShapeContent
-          const shape: Shape = {
-            type: 'shape',
-            shapeType: 'rect',
-            size: textBox.size,
-            position: textBox.position,
-            wrap: textBox.wrap,
-            fill: textBox.fill,
-            outline: textBox.outline,
-            textBody: {
-              content: textBox.content,
-              margins: textBox.margins,
-            },
-          };
-          if (textBox.id) shape.id = textBox.id;
-
-          const shapeContent: ShapeContent = { type: 'shape', shape };
-
-          // Find the matching parsed run and inject the ShapeContent
-          if (runIndex < paragraph.content.length) {
-            const parsedContent = paragraph.content[runIndex];
-            if (parsedContent.type === 'run') {
-              parsedContent.content.push(shapeContent);
+      const localName = getLocalName(runEl.name ?? '');
+      if (localName === 'drawing') {
+        processDrawing(runEl);
+      } else if (localName === 'AlternateContent') {
+        // Prefer the wps Choice branch (modern wps:wsp shapes); fall back
+        // to the Fallback branch only if no Choice is present.
+        const branches = getChildElements(runEl);
+        const choiceEl = branches.find((el) => getLocalName(el.name ?? '') === 'Choice');
+        const targetEl =
+          choiceEl ?? branches.find((el) => getLocalName(el.name ?? '') === 'Fallback');
+        if (targetEl) {
+          for (const innerEl of getChildElements(targetEl)) {
+            if (getLocalName(innerEl.name ?? '') === 'drawing') {
+              processDrawing(innerEl);
             }
           }
         }
