@@ -1480,8 +1480,10 @@ function convertHyperlink(
       // Add link mark to run marks
       const allMarks = [...runMarks, linkMark];
 
-      // Delegate to convertRunContent so tabs, breaks, drawings, fields,
-      // footnote refs etc. inside a hyperlink round-trip.
+      // Delegate to convertRunContent so tabs, breaks, fields, footnote refs
+      // etc. inside a hyperlink round-trip. (Drawings and shapes inside a
+      // hyperlink don't carry the hyperlink mark through convertImage /
+      // convertShape today — linked-image round-trip is a separate gap.)
       for (const content of child.content) {
         nodes.push(...convertRunContent(content, allMarks));
       }

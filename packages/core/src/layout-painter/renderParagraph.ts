@@ -1067,9 +1067,22 @@ export function renderLine(
         lineRightEdgeX !== undefined
           ? measureFollowingContentWidth(runsForLine, i, measureText, options?.context)
           : 0;
+      // Only promote when the right tab is the LAST tab on the line. Trailing
+      // tabs after a right-anchored item have no place to go in flex layout
+      // (they'd push the anchored item left), so we fall through to the
+      // non-flex clamp path and accept whatever Word does there.
+      let hasFollowingTab = false;
+      for (let j = i + 1; j < runsForLine.length; j++) {
+        if (isLineBreakRun(runsForLine[j])) break;
+        if (isTabRun(runsForLine[j])) {
+          hasFollowingTab = true;
+          break;
+        }
+      }
       const useRightAnchor =
         lineRightEdgeX !== undefined &&
         tabResult.alignment === 'end' &&
+        !hasFollowingTab &&
         currentX + tabResult.width + followingWidthForCheck >= lineRightEdgeX - 0.5;
 
       if (useRightAnchor) {

@@ -618,8 +618,8 @@ function createHyperlink(linkMark: Mark): Hyperlink {
 
 /**
  * Add a node to a hyperlink. OOXML hyperlinks wrap full runs, so non-text
- * inline nodes (tabs, hard breaks, images, fields) carrying the `hyperlink`
- * mark are emitted as separate runs inside the hyperlink's `children`.
+ * inline nodes (tabs, hard breaks) carrying the `hyperlink` mark are emitted
+ * as separate runs inside the hyperlink's `children`.
  */
 function addNodeToHyperlink(hyperlink: Hyperlink, node: PMNode): void {
   const nonLinkMarks = node.marks.filter((m) => m.type.name !== 'hyperlink');
@@ -630,10 +630,6 @@ function addNodeToHyperlink(hyperlink: Hyperlink, node: PMNode): void {
     hyperlink.children.push(createTabRun());
   } else if (node.type.name === 'hardBreak') {
     hyperlink.children.push(createBreakRun());
-  } else if (node.type.name === 'image') {
-    hyperlink.children.push(createImageRun(node));
-  } else if (node.type.name === 'shape') {
-    hyperlink.children.push(createShapeRun(node));
   }
 }
 
