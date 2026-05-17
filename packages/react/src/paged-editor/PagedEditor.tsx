@@ -681,15 +681,9 @@ function extractFloatingZones(blocks: FlowBlock[], contentWidth: number): Floati
       }
 
       if (leftMargin > 0 || rightMargin > 0) {
-        // Page-spanning floating images (cover photos, banners) don't leave
-        // room for text to wrap alongside them. Word renders them as if they
-        // had `topAndBottom` wrap — text flows above and below, not around.
-        // Without this guard, the exclusion zone shrinks subsequent
-        // paragraphs' available width to ≤0 and every character breaks to
-        // its own line (a 6-char heading measured as 6 lines tall),
-        // inflating the apparent paragraph height by ~10×. Threshold of
-        // 24px keeps tight wraps (text fits a word or two) but ditches
-        // the zone when the image is wider than the content area.
+        // Cover-width floating images leave no room for text alongside;
+        // Word treats them as topAndBottom. Skip the zone when <24px would
+        // remain — otherwise every glyph breaks to its own line.
         const remainingTextWidth = contentWidth - leftMargin - rightMargin;
         if (remainingTextWidth < 24) {
           continue;
